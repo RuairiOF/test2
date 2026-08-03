@@ -1,0 +1,125 @@
+name: Public Irish Shopify Census Compute
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.run-irish-shopify-census'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build_candidates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install requests aiohttp duckdb
+      - name: Build broad public candidate union
+        run: >-
+          python census_compute.py build
+          --output-dir results/candidates
+          --collections 12
+          --retries 3
+          --minimum-sheet 450000
+          --minimum-ie-list 100000
+          --minimum-candidates 450000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: irish-shopify-candidate-corpus
+          path: |
+            results/candidates/seeds.csv
+            results/candidates/summary.json
+          retention-days: 30
+          compression-level: 9
+
+  verifier_workers:
+    needs: build_candidates
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install aiohttp
+      - uses: actions/download-artifact@v4
+        with:
+          name: irish-shopify-candidate-corpus
+          path: downloaded
+      - name: Verify current Shopify identity and first-party Irish country
+        run: >-
+          python census_compute.py verify
+          --input downloaded/seeds.csv
+          --output-dir results/shard-${{ matrix.shard }}
+          --shard-count 64
+          --shard-index ${{ matrix.shard }}
+          --concurrency 300
+          --timeout 10
+      - uses: actions/upload-artifact@v4
+        with:
+          name: irish-shopify-verifier-${{ matrix.shard }}
+          path: |
+            results/shard-${{ matrix.shard }}/strict.csv
+            results/shard-${{ matrix.shard }}/live.csv
+            results/shard-${{ matrix.shard }}/summary.json
+          retention-days: 30
+          compression-level: 9
+
+  master_audit:
+    needs: verifier_workers
+    if: always() && needs.verifier_workers.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: irish-shopify-verifier-*
+          path: downloaded-shards
+      - name: Deduplicate and enforce 10,923-store hard gate
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          python census_compute.py audit \
+            --root downloaded-shards \
+            --output-dir results/audit \
+            --minimum 10923
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: irish-shopify-census-audit
+          path: results/audit/
+          retention-days: 30
+          compression-level: 9
+      - uses: actions/upload-artifact@v4
+        if: steps.audit.outputs.code == '0'
+        with:
+          name: accepted-irish-shopify-census
+          path: results/audit/
+          retention-days: 30
+          compression-level: 9
+      - name: Fail closed below benchmark
+        if: steps.audit.outputs.code != '0'
+        run: exit 2
