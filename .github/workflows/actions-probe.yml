@@ -1,0 +1,27 @@
+name: Actions Capacity Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.probe-actions'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Write heartbeat
+        run: |
+          date -u +'%Y-%m-%dT%H:%M:%SZ' > actions-heartbeat.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add actions-heartbeat.txt
+          git commit -m 'Record Actions heartbeat' || exit 0
+          git push origin HEAD:main
