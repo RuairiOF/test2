@@ -6,6 +6,10 @@ on:
     branches: [main]
     paths:
       - '.run-irish-shopify-census'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.run-irish-shopify-census-pr'
 
 permissions:
   contents: read
