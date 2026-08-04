@@ -6,6 +6,11 @@ on:
     paths:
       - '.run-public-census'
       - '.github/workflows/static.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.run-public-census-pr'
+      - '.github/workflows/static.yml'
   workflow_dispatch:
 
 permissions:
@@ -27,13 +32,20 @@ jobs:
           payload = {
               'status': 'ready',
               'run_id': os.environ['GITHUB_RUN_ID'],
+              'event': os.environ['GITHUB_EVENT_NAME'],
               'started_at_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
           }
           Path('runtime/public-census-runner.json').write_text(json.dumps(payload, indent=2))
           print(json.dumps(payload, indent=2))
           PY
-          git config user.name 'eirlink-census-runner'
-          git config user.email 'actions@users.noreply.github.com'
-          git add runtime/public-census-runner.json
-          git commit -m 'state: public census runner ready' || exit 0
-          git push
+          if [ "$GITHUB_EVENT_NAME" = 'push' ]; then
+            git config user.name 'eirlink-census-runner'
+            git config user.email 'actions@users.noreply.github.com'
+            git add runtime/public-census-runner.json
+            git commit -m 'state: public census runner ready' || exit 0
+            git push
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-runner-probe
+          path: runtime/public-census-runner.json
