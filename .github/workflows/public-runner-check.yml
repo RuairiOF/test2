@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - '.run-public-runner-check'
+  push:
+    branches: [main]
+    paths:
+      - '.run-public-runner-check'
 
 permissions:
   contents: read
