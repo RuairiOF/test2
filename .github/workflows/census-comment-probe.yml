@@ -1,0 +1,23 @@
+name: Census Comment Probe
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/run-census-probe')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python --version
+          curl --fail --location --max-time 30 https://www.shopify.com/ -o /dev/null
+          echo ready > runner-ready.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: census-comment-runner-ready
+          path: runner-ready.txt
