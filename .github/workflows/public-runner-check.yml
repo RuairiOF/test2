@@ -1,0 +1,24 @@
+name: Public Runner Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.run-public-runner-check'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python --version
+          curl --fail --location --max-time 30 https://www.shopify.com/ -o /dev/null
+          echo ready > runner-ready.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-runner-ready
+          path: runner-ready.txt
